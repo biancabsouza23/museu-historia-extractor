@@ -1,0 +1,443 @@
+# %% [markdown]
+# # Extrator de Códigos do Museu História do Piauí
+
+# %%
+import requests
+import json
+import bs4 as bs
+
+BASE_URL = "https://museudehistoriadopiaui.ufpi.edu.br"
+
+
+# %%
+def _extract_livros_categories() -> list[dict]:
+    livros_url = f"{BASE_URL}/acervo/livros"
+    response = requests.get(livros_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    categories = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    categories_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for category_div in categories_div:
+        # get p tag with category title
+        category = category_div.find("p")
+        if not category:
+            continue
+        text = category.text
+        # get a tag from p tag
+        url = category.find("a")
+        if not url:
+            continue
+        url = BASE_URL + url.get("href")
+        categories.append({"name": text, "url": url})
+    return categories
+
+
+def _extract_livros_from_category(category: dict) -> list[dict]:
+    category_url = category["url"]
+    response = requests.get(category_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    books = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    books_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for book_div in books_div:
+        # get drive url
+        drive_url = book_div.find("div", class_="WIdY2d M1aSXe")
+        if not drive_url:
+            continue
+        drive_url = drive_url.get("data-embed-download-url")
+        # get title
+        title = book_div.find("p", attrs={"dir": "ltr"})
+        if not title:
+            continue
+        title = title.text
+        books.append({"title": title, "drive_url": drive_url})
+    return books
+
+
+def extract_livros() -> list[dict]:
+    categories = _extract_livros_categories()
+    for category in categories:
+        category["content"] = _extract_livros_from_category(category)
+    return categories
+
+
+# %%
+livros = extract_livros()
+
+with open("livros.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(livros, indent=4))
+
+
+# %%
+def _extract_jornais_categories() -> list[dict]:
+    jornais_url = f"{BASE_URL}/acervo/jornais"
+    response = requests.get(jornais_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    categories = []
+    main_div = soup.find("div", attrs={"role": "main"})
+    categories_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for category_div in categories_div:
+        # get a tag
+        category = category_div.find("a")
+        if not category:
+            continue
+        # get href
+        url = BASE_URL + category.get("href")
+        if not url:
+            continue
+        # get p tag with category title
+        text = category.find("p")
+        if not text:
+            continue
+        text = text.text
+        categories.append({"name": text, "url": url})
+    return categories
+
+
+def _extract_jornais_yearly_from_category(category: dict) -> list[dict]:
+    category_url = category["url"]
+    response = requests.get(category_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    years = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    years_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for year_div in years_div:
+        # get a tag
+        year = year_div.find("a", class_="XqQF9c")
+        if not year:
+            continue
+        # get href
+        url = BASE_URL + year.get("href")
+        if not url:
+            continue
+        # get p tag with year title
+        text = year.find("span")
+        if not text:
+            continue
+        text = text.text
+        years.append({"name": text, "url": url})
+    return years
+
+
+def _extract_jornais_from_year(year: dict) -> list[dict]:
+    year_url = year["url"]
+    # Handle Jornal do Piaui - 1975 case
+    if "https://sites.google.com/" in year_url:
+        return []
+    response = requests.get(year_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    jornais = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    jornais_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for jornal_div in jornais_div:
+        # get drive url
+        drive_url = jornal_div.find("div", class_="WIdY2d M1aSXe")
+        if not drive_url:
+            continue
+        drive_url = drive_url.get("data-embed-download-url")
+        # get title
+        title = jornal_div.find("p", attrs={"dir": "ltr"})
+        if not title:
+            continue
+        title = title.text
+        jornais.append({"title": title, "drive_url": drive_url})
+    return jornais
+
+
+def extract_jornais() -> list[dict]:
+    categories = _extract_jornais_categories()
+    for category in categories:
+        category["years"] = _extract_jornais_yearly_from_category(category)
+        for year in category["years"]:
+            year["content"] = _extract_jornais_from_year(year)
+    return categories
+
+
+# %%
+
+jornais = extract_jornais()
+
+with open("jornais.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(jornais, indent=4))
+
+
+# %%
+
+
+def _extract_revistas_categories() -> list[dict]:
+    revistas_url = f"{BASE_URL}/acervo/revistas"
+    response = requests.get(revistas_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    categories = []
+    main_div = soup.find("div", attrs={"role": "main"})
+    categories_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for category_div in categories_div:
+        # get a tag
+        category = category_div.find("a")
+        if not category:
+            continue
+        # get href
+        url = BASE_URL + category.get("href")
+        if not url:
+            continue
+        # get p tag with category title
+        text = category.find("span")
+        if not text:
+            continue
+        text = text.text
+        categories.append({"name": text, "url": url})
+    return categories
+
+
+def _extract_revistas_from_category(category: dict) -> list[dict]:
+    category_url = category["url"]
+    response = requests.get(category_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    revistas = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    revistas_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for revista_div in revistas_div:
+        # get drive url
+        drive_url = revista_div.find("div", class_="WIdY2d M1aSXe")
+        if not drive_url:
+            continue
+        drive_url = drive_url.get("data-embed-download-url")
+        # get title
+        title = revista_div.find("p", attrs={"dir": "ltr"})
+        if not title:
+            continue
+        title = title.text
+        revistas.append({"title": title, "drive_url": drive_url})
+    return revistas
+
+
+def extract_revistas() -> list[dict]:
+    categories = _extract_revistas_categories()
+    for category in categories:
+        category["content"] = _extract_revistas_from_category(category)
+    return categories
+
+
+# %%
+
+revistas = extract_revistas()
+
+with open("revistas.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(revistas, indent=4))
+
+# %%
+
+
+def _extract_dissertacoes_teses_categories() -> list[dict]:
+    dissertacoes_teses_url = f"{BASE_URL}/acervo/tcc-disserta%C3%A7%C3%B5es-e-teses"
+    response = requests.get(dissertacoes_teses_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    categories = []
+    main_div = soup.find("div", attrs={"role": "main"})
+    categories_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for category_div in categories_div:
+        # get a tag
+        category = category_div.find("a")
+        if not category:
+            continue
+        # get href
+        url = BASE_URL + category.get("href")
+        if not url:
+            continue
+        # get p tag with category title
+        text = category.find("span")
+        if not text:
+            continue
+        text = text.text
+        categories.append({"name": text, "url": url})
+    return categories
+
+
+def _extract_dissertacoe_teses_from_category(category: dict) -> list[dict]:
+    category_url = category["url"]
+    response = requests.get(category_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    dissertacoes_teses = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    dissertacoes_teses_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for dissertacao_tese_div in dissertacoes_teses_div:
+        # get drive url
+        drive_url = dissertacao_tese_div.find("div", class_="WIdY2d M1aSXe")
+        if not drive_url:
+            continue
+        drive_url = drive_url.get("data-embed-download-url")
+        # get title
+        title = dissertacao_tese_div.find("p", attrs={"dir": "ltr"})
+        if not title:
+            continue
+        title = title.text
+        dissertacoes_teses.append({"title": title, "drive_url": drive_url})
+    return dissertacoes_teses
+
+
+def extract_dissertacoes_teses() -> list[dict]:
+    categories = _extract_dissertacoes_teses_categories()
+    for category in categories:
+        category["content"] = _extract_dissertacoe_teses_from_category(
+            category
+        )
+    return categories
+
+
+# %%
+
+dissertacoes_teses = extract_dissertacoes_teses()
+
+with open("dissertacoes_teses.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(dissertacoes_teses, indent=4))
+
+# %%
+
+
+def _extract_periodicos_seculo_xixxx_categories() -> list[dict]:
+    periodicos_seculo_xixxx_url = f"{BASE_URL}/acervo/periódicos-do-século-xix-xx"
+    response = requests.get(periodicos_seculo_xixxx_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    categories = []
+    main_div = soup.find("div", attrs={"role": "main"})
+    categories_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for category_div in categories_div:
+        # get a tag
+        category = category_div.find("a")
+        if not category:
+            continue
+        # get href
+        url = BASE_URL + category.get("href")
+        if not url:
+            continue
+        # get p tag with category title
+        text = category.find("span")
+        if not text:
+            continue
+        text = text.text
+        categories.append({"name": text, "url": url})
+    return categories
+
+
+def _extract_periodicos_seculo_xixxx_from_category(category: dict) -> list[dict]:
+    category_url = category["url"]
+    response = requests.get(category_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    periodicos_seculo_xixxx = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    periodicos_seculo_xixxx_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for periodico_seculo_xixx_div in periodicos_seculo_xixxx_div:
+        # get drive url
+        drive_url = periodico_seculo_xixx_div.find("div", class_="WIdY2d M1aSXe")
+        if not drive_url:
+            continue
+        drive_url = drive_url.get("data-embed-download-url")
+        # get title
+        title = periodico_seculo_xixx_div.find("p", attrs={"dir": "ltr"})
+        if not title:
+            continue
+        title = title.text
+        periodicos_seculo_xixxx.append({"title": title, "drive_url": drive_url})
+    return periodicos_seculo_xixxx
+
+
+def extract_periodicos_seculo_xixxx() -> list[dict]:
+    categories = _extract_periodicos_seculo_xixxx_categories()
+    for category in categories:
+        category["content"] = (
+            _extract_periodicos_seculo_xixxx_from_category(category)
+        )
+    return categories
+
+
+# %%
+
+periodicos_seculo_xixxx = extract_periodicos_seculo_xixxx()
+
+with open("periodicos_seculo_xixxx.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(periodicos_seculo_xixxx, indent=4))
+
+# %%
+
+
+def _extract_documentos_categories() -> list[dict]:
+    documentos_url = f"{BASE_URL}/acervo/documentos-acadêmicos-e-científicos"
+    response = requests.get(documentos_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    categories = []
+    main_div = soup.find("div", attrs={"role": "main"})
+    categories_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for category_div in categories_div:
+        # get a tag
+        category = category_div.find("a")
+        if not category:
+            continue
+        # get href
+        url = BASE_URL + category.get("href")
+        if not url:
+            continue
+        # get p tag with category title
+        text = category.find("span")
+        if not text:
+            continue
+        text = text.text
+        categories.append({"name": text, "url": url})
+    return categories
+
+
+def _extract_documentos_from_category(category: dict) -> list[dict]:
+    category_url = category["url"]
+    response = requests.get(category_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    documentos = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    documentos_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for documento_div in documentos_div:
+        # get drive url
+        drive_url = documento_div.find("div", class_="WIdY2d M1aSXe")
+        if not drive_url:
+            continue
+        drive_url = drive_url.get("data-embed-download-url")
+        # get title
+        title = documento_div.find("p", attrs={"dir": "ltr"})
+        if not title:
+            continue
+        title = title.text
+        documentos.append({"title": title, "drive_url": drive_url})
+    return documentos
+
+
+def extract_documentos() -> list[dict]:
+    categories = _extract_documentos_categories()
+    for category in categories:
+        category["content"] = _extract_documentos_from_category(category)
+    return categories
+
+
+# %%
+
+documentos = extract_documentos()
+
+with open("documentos.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(documentos, indent=4))
