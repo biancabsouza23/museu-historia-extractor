@@ -5,8 +5,19 @@
 import requests
 import json
 import bs4 as bs
+import os
 
 BASE_URL = "https://museudehistoriadopiaui.ufpi.edu.br"
+
+def time_it(func):
+    def wrapper(*args, **kwargs):
+        import time
+        start = time.time()
+        result = func(*args, **kwargs)
+        end = time.time()
+        print(f"{func.__name__} took {end - start} seconds")
+        return result
+    return wrapper
 
 
 # %%
@@ -58,6 +69,7 @@ def _extract_livros_from_category(category: dict) -> list[dict]:
     return books
 
 
+@time_it
 def extract_livros() -> list[dict]:
     categories = _extract_livros_categories()
     for category in categories:
@@ -153,6 +165,7 @@ def _extract_jornais_from_year(year: dict) -> list[dict]:
     return jornais
 
 
+@time_it
 def extract_jornais() -> list[dict]:
     categories = _extract_jornais_categories()
     for category in categories:
@@ -223,6 +236,7 @@ def _extract_revistas_from_category(category: dict) -> list[dict]:
     return revistas
 
 
+@time_it
 def extract_revistas() -> list[dict]:
     categories = _extract_revistas_categories()
     for category in categories:
@@ -290,12 +304,11 @@ def _extract_dissertacoe_teses_from_category(category: dict) -> list[dict]:
     return dissertacoes_teses
 
 
+@time_it
 def extract_dissertacoes_teses() -> list[dict]:
     categories = _extract_dissertacoes_teses_categories()
     for category in categories:
-        category["content"] = _extract_dissertacoe_teses_from_category(
-            category
-        )
+        category["content"] = _extract_dissertacoe_teses_from_category(category)
     return categories
 
 
@@ -359,12 +372,11 @@ def _extract_periodicos_seculo_xixxx_from_category(category: dict) -> list[dict]
     return periodicos_seculo_xixxx
 
 
+@time_it
 def extract_periodicos_seculo_xixxx() -> list[dict]:
     categories = _extract_periodicos_seculo_xixxx_categories()
     for category in categories:
-        category["content"] = (
-            _extract_periodicos_seculo_xixxx_from_category(category)
-        )
+        category["content"] = _extract_periodicos_seculo_xixxx_from_category(category)
     return categories
 
 
@@ -428,6 +440,7 @@ def _extract_documentos_from_category(category: dict) -> list[dict]:
     return documentos
 
 
+@time_it
 def extract_documentos() -> list[dict]:
     categories = _extract_documentos_categories()
     for category in categories:
@@ -441,3 +454,95 @@ documentos = extract_documentos()
 
 with open("documentos.json", "w", encoding="utf-8") as f:
     f.write(json.dumps(documentos, indent=4))
+
+
+# %%
+
+photos_folder_directory = "photos"
+os.makedirs(photos_folder_directory, exist_ok=True)
+
+
+def _extract_photos_categories() -> list[dict]:
+    photos_url = f"{BASE_URL}/acervo/fotos-e-vídeos/"
+    response = requests.get(photos_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    categories = []
+    main_div = soup.find("div", attrs={"role": "main"})
+    categories_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for category_div in categories_div:
+        # get a tag
+        category = category_div.find("a")
+        if not category:
+            continue
+        # get href
+        url = BASE_URL + category.get("href")
+        if not url:
+            continue
+        # get p tag with category title
+        text = category.find("p")
+        if not text:
+            continue
+        text = text.text
+        # get img tag
+        img = category_div.find("img")
+        if not img:
+            continue
+        img = img.get("src")
+        # download image
+        img_response = requests.get(img)
+        img_response.raise_for_status()
+        img_path = f"{photos_folder_directory}/{text}.jpg"
+        os.makedirs(os.path.dirname(img_path), exist_ok=True)
+        with open(img_path, "wb") as f:
+            f.write(img_response.content)
+        categories.append({"name": text, "url": url, "img": img_path})
+    return categories
+
+
+def _extract_photos_from_category(category: dict) -> list[dict]:
+    category_url = category["url"]
+    response = requests.get(category_url)
+    response.raise_for_status()
+    soup = bs.BeautifulSoup(response.text, "html.parser")
+    photos = []
+
+    main_div = soup.find("div", attrs={"role": "main"})
+    photos_div = main_div.find_all("div", attrs={"jsname": "F57UId"})
+    for photo_div in photos_div:
+        # get span tag with photo title
+        title = photo_div.find("span")
+        if not title:
+            continue
+        title = title.text
+        # get img tag
+        img = photo_div.find("img")
+        if not img:
+            continue
+        img = img.get("src")
+        # download image
+        img_response = requests.get(img)
+        img_response.raise_for_status()
+        img_path = f"{photos_folder_directory}/{category['name']}/{title}.jpg"
+        os.makedirs(os.path.dirname(img_path), exist_ok=True)
+        with open(img_path, "wb") as f:
+            f.write(img_response.content)
+        photos.append({"title": title, "img": img_path})
+    return photos
+
+
+@time_it
+def extract_photos() -> list[dict]:
+    categories = _extract_photos_categories()
+    for category in categories:
+        category["content"] = _extract_photos_from_category(category)
+    return categories
+
+
+# %%
+photos = extract_photos()
+
+with open("photos.json", "w", encoding="utf-8") as f:
+    f.write(json.dumps(photos, indent=4))
+
+# %%
