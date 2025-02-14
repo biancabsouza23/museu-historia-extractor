@@ -19,3 +19,7 @@ Após instalar as dependências, execute o programa utilizando o seguinte comand
 ```bash
 python extractor.py
 ```
+
+## Download
+
+Há uma versão pré-pronta disponível em **[🔗 Releases](https://github.com/biancabsouza23/museu-historia-extractor/releases)**.
