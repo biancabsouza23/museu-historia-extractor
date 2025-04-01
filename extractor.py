@@ -463,7 +463,7 @@ os.makedirs(photos_folder_directory, exist_ok=True)
 
 
 def _extract_photos_categories() -> list[dict]:
-    photos_url = f"{BASE_URL}/acervo/fotos-e-vídeos/"
+    photos_url = f"{BASE_URL}/fotos-e-vídeos/"
     response = requests.get(photos_url)
     response.raise_for_status()
     soup = bs.BeautifulSoup(response.text, "html.parser")
