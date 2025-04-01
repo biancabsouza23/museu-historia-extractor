@@ -528,7 +528,7 @@ def _extract_photos_from_category(category: dict) -> list[dict]:
         os.makedirs(os.path.dirname(img_path), exist_ok=True)
         with open(img_path, "wb") as f:
             f.write(img_response.content)
-        photos.append({"title": title, "img": img_path})
+        photos.append({"title": title, "img": img_path, "url": img})
         index += 1
     return photos
 
